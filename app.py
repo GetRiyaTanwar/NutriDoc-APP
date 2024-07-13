@@ -224,7 +224,7 @@ if inches > 0 and weight > 0:
     Generate a healthier recipe version of the food items in the image, considering the context of the user's profile:
     - Sex: {sex}
     - Health Issues: {", ".join(health_issues)}
-    - Dietary Preference: {dietary_preference}
+    - Dietary Preference: {dietary_preference}g
     - BMI: {bmi:.2f}
     """
 
