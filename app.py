@@ -9,13 +9,19 @@ import time
 import requests
 import numpy as np
 from io import BytesIO
+import pytesseract  # OCR tool
 
 # Set page configuration
 st.set_page_config(page_title="Welcome to NutriDoc APP", layout="wide")
 
 load_dotenv()
 
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+# Configure API key for Generative AI
+api_key = os.getenv("GOOGLE_API_KEY")
+if api_key:
+    genai.configure(api_key=api_key)
+else:
+    st.error("Google API key not found. Please set the GOOGLE_API_KEY environment variable.")
 
 @st.cache_data
 def download_image(url):
@@ -39,12 +45,12 @@ def make_circular(image):
     np_image = np.dstack((np_image[:, :, :3], np_alpha))
     return Image.fromarray(np_image)
 
-def get_gemini_response(input_prompt, image, retries=3, delay=5):
-    model = genai.GenerativeModel("gemini-pro-vision")
+def get_gemini_response(input_prompt, retries=3, delay=5):
+    model = genai.GenerativeModel("gemini-pro")
     attempt = 0
     while attempt < retries:
         try:
-            response = model.generate_content([input_prompt, image[0]])
+            response = model.generate_content([input_prompt])
             if not response.text:
                 if response.safety_ratings:
                     st.warning(f"Response blocked due to safety ratings: {response.safety_ratings}")
@@ -58,18 +64,8 @@ def get_gemini_response(input_prompt, image, retries=3, delay=5):
             time.sleep(delay * attempt)
     raise Exception("All retry attempts failed. Please check the service status or contact support.")
 
-def input_image_setup(uploaded_file):
-    if uploaded_file is not None:
-        bytes_data = uploaded_file.getvalue()
-        image_parts = [
-            {
-                "mime_type": uploaded_file.type,
-                "data": bytes_data
-            }
-        ]
-        return image_parts
-    else:
-        raise FileNotFoundError("No file uploaded")
+def extract_text_from_image(image):
+    return pytesseract.image_to_string(image)
 
 def parse_nutrition_response(response_text):
     # Define multiple regular expression patterns to extract the nutritional information
@@ -220,66 +216,54 @@ if inches > 0 and weight > 0:
     - BMI: {bmi:.2f}
     """
 
-    healthier_recipe_prompt = f"""
-    Generate a healthier recipe version of the food items in the image, considering the context of the user's profile:
+    healthier_alternatives_prompt = f"""
+    Generate a table of healthier alternatives for the food items in the image:
     - Sex: {sex}
     - Health Issues: {", ".join(health_issues)}
-    - Dietary Preference: {dietary_preference}g
+    - Dietary Preference: {dietary_preference}
     - BMI: {bmi:.2f}
     """
 
-    uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-
+    uploaded_file = st.file_uploader("Upload an image of your food", type=["png", "jpg", "jpeg"])
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_column_width=True)
-
-        submit = st.button("Tell me about calories from above image")
-
-        ## If submit button is clicked
-        if submit:
-            image_data = input_image_setup(uploaded_file)
-            try:
-                response_text = get_gemini_response(input_prompt, image_data)
-                st.markdown("### The Response: ")
-                st.write(response_text)  # Display the full response
-                
-                # Parse the response to get nutritional data
-                nutrition_data = parse_nutrition_response(response_text)
-                
-                if nutrition_data:
-                    # Generate and display the bar chart
-                    fig = plot_bar_chart(nutrition_data)
-                    if fig:
-                        st.pyplot(fig)
-                    
-                    # Get diet advice based on BMI, health issues, and nutrition data
-                    diet_advice = get_diet_advice(bmi, health_issues, nutrition_data)
-                    
-                    # Display diet advice in a table
-                    st.markdown("### Diet Advice:")
-                    diet_table = {"Advice": diet_advice}
-                    st.table(diet_table)
-                else:
-                    st.warning("No nutritional data found in the response.")
-                
-                # Generate and display a humorous quote
-                quote_response = get_gemini_response(quote_prompt, image_data)
-                st.markdown("### Humorous Quote: ")
-                st.write(quote_response)
-                
-                # Generate and display the table of food items to replace for a healthier diet
-                replace_food_response = get_gemini_response(replace_food_prompt, image_data)
-                st.subheader("Food Items to Replace for a Healthier Diet: ")
-                st.write(replace_food_response)
-                
-                # Generate and display a healthier recipe version
-                healthier_recipe_response = get_gemini_response(healthier_recipe_prompt, image_data)
-                st.subheader("Healthier Recipe Version: ")
-                st.write(healthier_recipe_response)
-
-            except Exception as e:
-                st.error(f"Failed to get response from Gemini: {e}")
-                st.error("Please retry or report the issue at https://developers.generativeai.google/guide/troubleshooting")
-else:
-    st.info("Please enter valid height and weight to calculate BMI and analyze the image.")
+        st.image(image, caption='Uploaded Image', use_column_width=True)
+        
+        # Extract text from image
+        extracted_text = extract_text_from_image(image)
+        
+        # Combine input prompt with extracted text
+        combined_prompt = f"{input_prompt}\n\nExtracted text from image:\n{extracted_text}"
+        
+        # Get response from Gemini Pro
+        try:
+            response_text = get_gemini_response(combined_prompt)
+            st.markdown(f"## Nutrition Analysis")
+            st.markdown(response_text)
+            
+            # Parse nutrition data from response
+            nutrition_data = parse_nutrition_response(response_text)
+            
+            # Plot bar chart
+            bar_chart = plot_bar_chart(nutrition_data)
+            if bar_chart:
+                st.pyplot(bar_chart)
+            
+            # Get diet advice
+            diet_advice = get_diet_advice(bmi, health_issues, nutrition_data)
+            st.markdown(f"## Diet Advice")
+            for advice in diet_advice:
+                st.markdown(f"- {advice}")
+            
+            # Get humorous quote
+            humorous_quote = get_gemini_response(quote_prompt)
+            st.markdown(f"## Humorous Quote")
+            st.markdown(humorous_quote)
+            
+            # Get healthier alternatives
+            healthier_alternatives = get_gemini_response(healthier_alternatives_prompt)
+            st.markdown(f"## Healthier Alternatives")
+            st.markdown(healthier_alternatives)
+            
+        except Exception as e:
+            st.error(f"Error processing image: {e}")
