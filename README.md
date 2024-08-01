@@ -26,6 +26,3 @@ Integration: Google Drive API for image retrieval and Google Generative AI for c
 
 https://drive.google.com/file/d/1dT5ff89uiZP0Oxv1XtCWIWBTWH0aQQTF/view?usp=sharing
 
-""APP_LINK""
-
-https://getriyatanwar-nutridoc-app-app-ugrset.streamlit.app/
