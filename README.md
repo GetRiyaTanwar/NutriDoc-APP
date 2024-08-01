@@ -7,14 +7,19 @@ NutriDoc APP is a cutting-edge application that leverages Generative AI technolo
 ""FEATURES""
 
 Image Processing: Analyze nutritional information from images of food items.
+
 Personalized Dietary Advice: Generate diet recommendations based on user profiles.
+
 Content Generation: Create humorous quotes and healthier recipe suggestions.
+
 User-Friendly Interface: Streamlit-based web interface for seamless interaction.
 
 ""PROJECT_STRUCTURE""
 
 Frontend: Built with Streamlit to create an interactive and responsive web interface.
+
 Backend: Python scripts for image processing, API calls, data parsing, and content generation.
+
 Integration: Google Drive API for image retrieval and Google Generative AI for content generation.
 
 ""VIDEO_DEMO""
