@@ -1,5 +1,5 @@
 streamlit
+google.generativeai
+python-dotenv
 matplotlib
-pandas
-numpy
 pytesseract
