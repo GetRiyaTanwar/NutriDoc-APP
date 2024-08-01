@@ -1,4 +1,5 @@
-NutriDoc APP : A Generative AI Nutritionist using Google Gemini Pro Vision
+NutriDoc APP : A Generative AI Nutritionist using Google Gemini Pro
+
 ""OVERVIEW""
 NutriDoc APP is a cutting-edge application that leverages Generative AI technology to provide detailed calorie counts and dietary advice based on user profiles. This includes information such as BMI, health issues, and dietary preferences. The app integrates image processing, AI model integration, and data analysis to offer personalized diet recommendations and insights into food nutrition.
 
