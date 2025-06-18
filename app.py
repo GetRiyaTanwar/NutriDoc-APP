@@ -1,7 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
 import os
-from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 import re
 from PIL import Image, ImageDraw
@@ -13,11 +12,15 @@ from io import BytesIO
 # Set page configuration
 st.set_page_config(page_title="Welcome to NutriDoc APP", layout="wide")
 
-# Load environment variables
-load_dotenv()
+# --- API Key Input ---
+api_key = st.sidebar.text_input("Enter your Google API Key", type="password")
 
-# Configure Google Generative AI
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+if api_key:
+    genai.configure(api_key=api_key)
+    st.session_state.api_key_configured = True
+else:
+    st.session_state.api_key_configured = False
+    st.sidebar.warning("Please enter your Google API Key to use the app.")
 
 # Cache data to optimize resource usage
 @st.cache_data
@@ -26,7 +29,7 @@ def download_image(url):
     if response.status_code == 200:
         return Image.open(BytesIO(response.content)).convert("RGBA")
     else:
-        raise Exception("Failed to download image from URL")
+        raise Exception(f"Failed to download image from URL. Status code: {response.status_code}")
 
 # Make an image circular
 def make_circular(image):
@@ -45,6 +48,10 @@ def make_circular(image):
 
 # Get response from Gemini 1.5 Pro
 def get_gemini_response(input_prompt, image, retries=3, delay=5):
+    if not st.session_state.api_key_configured:
+        st.error("API Key not configured. Please enter your Google API Key.")
+        return None
+
     # Initialize Gemini 1.5 Pro
     model = genai.GenerativeModel("gemini-1.5-pro")
     attempt = 0
@@ -116,6 +123,8 @@ def plot_bar_chart(nutrition_data):
 
 # Calculate BMI
 def calculate_bmi(weight, height_cm):
+    if height_cm == 0:
+        return 0  # Avoid division by zero
     return weight / (height_cm / 100) ** 2
 
 # Convert height from inches to cm
@@ -125,10 +134,12 @@ def height_in_inches_to_cm(inches):
 # Generate diet advice
 def get_diet_advice(bmi, health_issues, nutrition_data):
     advice = []
-    if bmi < 18.5:
+    if bmi < 18.5 and bmi != 0: # Check for non-zero BMI before giving advice
         advice.append("You are underweight. Focus on calorie-dense foods and healthy fats.")
     elif bmi >= 25:
         advice.append("You are overweight. Focus on a balanced diet with portion control.")
+    elif 18.5 <= bmi < 25:
+        advice.append("Your BMI is healthy. Maintain a balanced diet.")
     
     if "Heart Issue" in health_issues:
         advice.append("Limit saturated fats and cholesterol. Focus on lean proteins and fiber-rich foods.")
@@ -142,21 +153,32 @@ def get_diet_advice(bmi, health_issues, nutrition_data):
     if nutrition_data:
         for item, calories in nutrition_data.items():
             if calories > 200:
-                advice.append(f"Avoid excessive calorie intake from {item}.")
+                advice.append(f"Consider reducing calorie intake from {item} as it's high in calories.")
+            elif calories > 100:
+                pass # Moderate calories, no specific warning
+            else:
+                advice.append(f"{item} is a good low-calorie option.")
     
+    if not advice:
+        advice.append("No specific diet advice generated based on the provided information.")
+
     return advice
 
 # Display the app
-logo_url = "https://drive.google.com/uc?id=11iHX_WYVXY8Dz2QtJctPzuwgMwwnf2b1"
+logo_url = "https://drive.google.com/uc?export=download&id=16716w0N7Yuh5X4l-uMncEkScmoEcMNK1"
 @st.cache_data
 def get_logo_image(url):
     try:
         logo_image = download_image(url)
         logo_image = make_circular(logo_image)
-        logo_image.save("/tmp/logo_circle.png")
-        return "/tmp/logo_circle.png"
+        # Save to a temporary file path that Streamlit can access
+        temp_path = os.path.join("/tmp", "logo_circle.png")
+        if not os.path.exists("/tmp"):
+            os.makedirs("/tmp")
+        logo_image.save(temp_path)
+        return temp_path
     except Exception as e:
-        st.warning(f"Logo image not found: {e}")
+        st.warning(f"Could not load logo image: {e}. Please ensure the URL is correct and accessible.")
         return None
 
 logo_image_path = get_logo_image(logo_url)
@@ -182,11 +204,16 @@ if inches > 0 and weight > 0:
     st.markdown(f"### Your BMI: {bmi:.2f}")
 
     input_prompt = f"""
-    You are a nutrition expert. Identify food items from the image and calculate total calories:
+    You are a nutrition expert. Identify food items from the image and calculate total calories for each identified food item.
+    Also, provide a summary of the nutritional content and any potential dietary recommendations based on the identified foods and the user's profile.
+    
+    User Profile:
     - Sex: {sex}
-    - Health Issues: {", ".join(health_issues)}
+    - Health Issues: {", ".join(health_issues) if health_issues else "None"}
     - Dietary Preference: {dietary_preference}
     - BMI: {bmi:.2f}
+
+    Format the calorie information clearly, for example: "FoodItem - XXX calories".
     """
 
     uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
@@ -196,24 +223,30 @@ if inches > 0 and weight > 0:
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
         if st.button("Analyze Image"):
-            image_data = input_image_setup(uploaded_file)
-            try:
-                response_text = get_gemini_response(input_prompt, image_data)
-                st.markdown("### Analysis Response:")
-                st.write(response_text)
+            if st.session_state.api_key_configured:
+                with st.spinner("Analyzing image..."):
+                    image_data = input_image_setup(uploaded_file)
+                    try:
+                        response_text = get_gemini_response(input_prompt, image_data)
+                        if response_text:
+                            st.markdown("### Analysis Response:")
+                            st.write(response_text)
 
-                nutrition_data = parse_nutrition_response(response_text)
-                if nutrition_data:
-                    fig = plot_bar_chart(nutrition_data)
-                    if fig:
-                        st.pyplot(fig)
+                            nutrition_data = parse_nutrition_response(response_text)
+                            if nutrition_data:
+                                fig = plot_bar_chart(nutrition_data)
+                                if fig:
+                                    st.pyplot(fig)
 
-                    advice = get_diet_advice(bmi, health_issues, nutrition_data)
-                    st.markdown("### Diet Advice:")
-                    st.table({"Advice": advice})
-                else:
-                    st.warning("No nutritional data found.")
-            except Exception as e:
-                st.error(f"Analysis failed: {e}")
+                                advice = get_diet_advice(bmi, health_issues, nutrition_data)
+                                st.markdown("### Diet Advice:")
+                                for adv in advice:
+                                    st.info(adv) # Using st.info for better readability of advice points
+                            else:
+                                st.warning("No specific nutritional data found in the response to plot or provide detailed advice.")
+                    except Exception as e:
+                        st.error(f"Analysis failed: {e}")
+            else:
+                st.error("Please enter your Google API Key to analyze the image.")
 else:
-    st.info("Please enter valid height and weight to calculate BMI.")
+    st.info("Please enter valid height and weight to calculate BMI and proceed with analysis.")
