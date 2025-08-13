@@ -1,4 +1,4 @@
-NutriDoc APP : A Generative AI Nutritionist using Google Gemini 1.5 Pro
+NutriDoc APP : A Generative AI Nutritionist using Google Gemini 1.5 flash
 
 ""OVERVIEW""
 
